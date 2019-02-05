@@ -4,13 +4,9 @@ import numpy as np
 import math
 import rospy
 import roslib
-import tf
-import intera_interface
 import cv2 
-import matplotlib
-import matplotlib.pyplot as plt
+import intera_interface
 
-from SawyerClass import Sawyer
 from keras.models import load_model
 
 BLUELOWER = np.array([110, 100, 100])
@@ -47,12 +43,10 @@ def detection():
     distCoeffs = np.array([0.047441, -0.104070, 0.006161, 0.000338, 0.000000])
 
     y_robot=[-0.4,-0.8]
-    #y_image=[206,391]
-    y_image = [196,380]
+    y_image=[173,355]
 
     x_robot=[-0.3,0.3]
-    #x_image=[187,462]
-    x_image = [170,446]
+    x_image=[178,448]
     
     positions=[]
     
@@ -119,12 +113,9 @@ limb=intera_interface.Limb('right')
 # Create an object to interface with the gripper
 gripper = intera_interface.Gripper('right')
 
-# Call the Sawyer Class
-robot=Sawyer()
-
 # Models location
-forward_model_file='weights/ForwardModel/4DOF/forward.h5'
-inverse_model_file='weights/InverseModel/inverse.h5'
+forward_model_file='/home/michail/ros_ws/src/intera_sdk/intera_examples/scripts/MyScripts/sawyer-nn-pyrdmp/weights/ForwardModel/4DOF/forward.h5'
+inverse_model_file='/home/michail/ros_ws/src/intera_sdk/intera_examples/scripts/MyScripts/sawyer-nn-pyrdmp/weights/InverseModel/MLP_2.h5'
 
 # Load the models
 forwardModel= load_model(forward_model_file)
@@ -164,11 +155,6 @@ q_init=np.array([[float(joint_positions[i]) for i in joint_names]])
 
 # Damping factor
 d=np.array([100,100,100,100]);
-d_rate=1
-
-# Initialize some counters
-counter=0
-error=1000
 
 # Declare the joint position history and time history
 time_total=[0]
@@ -176,6 +162,12 @@ q1=[]
 q2=[]
 q3=[]
 q4=[]
+
+# Initialize some counters
+counter=0
+error=1000
+convert=1000000000
+thresh=-0.06
 
 while  error>0.075:
 
