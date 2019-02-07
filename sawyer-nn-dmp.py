@@ -298,7 +298,23 @@ comparison(t, f_q, x, x_r)
 show_all()
 
 # Save trajectory
+traj_final = np.concatenate((x_r, np.multiply(np.ones((x_r.shape[0], 1)), 0.0402075604203)), axis=1)
 
+# Create the trajectory file
+max_time = t[-1]
+time = np.linspace(0, max_time, x_r.shape[0]).reshape((x_r.shape[0], 1))
+
+#print(time[-100:-1])
+#print(t[-100:-1])
+
+traj_final = np.concatenate((t.reshape((-1, 1)), traj_final), axis=1)
+
+# Save trajectory
+np.savetxt('traj_final.txt', traj_final, delimiter=',', header='time,right_j0,right_j1,right_j2,right_j3,right_j4,right_j5,right_j6,right_gripper', comments='', fmt="%1.12f")
+
+
+
+"""
 
 interp = 200
 
@@ -316,3 +332,4 @@ np.savetxt('traj_final.txt', traj_final, delimiter=',', header='time,right_j0,ri
 
 
 
+"""
