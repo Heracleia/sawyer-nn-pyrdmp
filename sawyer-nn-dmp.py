@@ -2,7 +2,7 @@
 
 import math
 import rospy
-import cv2 
+import cv2
 import intera_interface
 from pyrdmp.dmp import DynamicMovementPrimitive as DMP
 from pyrdmp.plots import *
@@ -114,7 +114,7 @@ limb = intera_interface.Limb('right')
 gripper = intera_interface.Gripper('right')
 
 # Models location
-forward_model_file = '/home/michail/ros_ws/src/intera_sdk/intera_examples/scripts/MyScripts/sawyer-nn-pyrdmp/weights/ForwardModel/4DOF/forward.h5'
+forward_model_file = '/home/michail/ros_ws/src/intera_sdk/intera_examples/scripts/MyScripts/sawyer-nn-pyrdmp/weights/ForwardModel/7DOF/UFMD7_5M.h5'
 inverse_model_file = '/home/michail/ros_ws/src/intera_sdk/intera_examples/scripts/MyScripts/sawyer-nn-pyrdmp/weights/InverseModel/MLP_2.h5'
 
 # Load the models
@@ -144,17 +144,16 @@ print(target)
 joint_positions = limb.joint_angles()
 
 # Just a vector to name the joints of the robot
-joint_names = ['right_j0', 'right_j1', 'right_j3', 'right_j5']
 full_names = ['right_j0', 'right_j1', 'right_j2', 'right_j3', 'right_j4', 'right_j5', 'right_j6']
 
-q = np.array([[float(joint_positions[i]) for i in joint_names]])
+q = np.array([[float(joint_positions[i]) for i in full_names]])
 
 # Damping factor
 d = np.array([100, 100, 100, 100])
 
 # Declare the joint position history and time history
 t = np.array([[0]])
-q_demo = np.empty((0, 4))
+q_demo = np.empty((0, 7))
 
 # Initialize some counters
 counter = 0
@@ -170,7 +169,7 @@ while error > 0.075:
     time = rospy.Time.now()
     dt = float(time.secs)/float(convert)
     t = np.append(t, t[counter-1]+dt)
-    q_demo = np.vstack((q_demo, [q[0][0], q[0][1], q[0][2], q[0][3]]))
+    q_demo = np.vstack((q_demo, q))
 
     # Perform the forward model prediction 
     x = np.divide(forwardModel.predict(q), 100)
@@ -194,8 +193,7 @@ while error > 0.075:
 
     # Get the new state of the robot
     joint_positions = limb.joint_angles()
-    q_r = np.array([[float(joint_positions[i]) for i in joint_names]])
-    q = np.array([[q_r[0][0], q_r[0][1], q_r[0][2], q_r[0][3]]])
+    q = np.array([[float(joint_positions[i]) for i in full_names]])
 
     # Find the error from the target
     error = math.fabs(x[0][2]-thresh)
@@ -266,22 +264,23 @@ orientation = [180, 0, 90]
 coordinates = [target[0], target[1], target[2]]
 
 # Call the IK method
-ik = robot.Inverse_Kinematics(coordinates,orientation)
+ik = robot.Inverse_Kinematics(coordinates, orientation)
 
 # Move the robot again to the starting point
 angles = limb.joint_angles()
-angles['right_j0']=math.radians(0)
-angles['right_j1']=math.radians(-50)
-angles['right_j2']=math.radians(0)
-angles['right_j3']=math.radians(120)
-angles['right_j4']=math.radians(0)
-angles['right_j5']=math.radians(0)
-angles['right_j6']=math.radians(0)
+angles['right_j0'] = math.radians(0)
+angles['right_j1'] = math.radians(-50)
+angles['right_j2'] = math.radians(0)
+angles['right_j3'] = math.radians(120)
+angles['right_j4'] = math.radians(0)
+angles['right_j5'] = math.radians(0)
+angles['right_j6'] = math.radians(0)
 limb.move_to_joint_positions(angles)
 
+print(ik)
+
 # Define the target joint positions
-joint_target = np.array([[float(ik[i]) for i in joint_names]])
-goal = np.array([[joint_target[0][0], joint_target[0][1], joint_target[0][2], joint_target[0][3]]])
+goal = np.array([[float(ik[i]) for i in full_names]])
 
 print('Adaptation start')
 samples = 10
@@ -297,5 +296,23 @@ print('Adaptation complete')
 # Plot functions
 comparison(t, f_q, x, x_r)
 show_all()
+
+# Save trajectory
+
+
+interp = 200
+
+# Create the trajectory file
+max_time = t[-1]
+time = np.linspace(0, max_time, interp)
+new_q = np.array([np.interp(np.linspace(0, len(x_r)-1, interp), np.linspace(0, len(x_r)-1, len(x_r)), x_r[:, i]) for i in range(len(x_r[0]))])
+
+traj_final = np.concatenate((new_q.T, np.multiply(np.ones((interp, 1)), 0.0402075604203)), axis=1)
+
+traj_final = np.concatenate((time.reshape((-1, 1)), traj_final), axis=1)
+
+# Save trajectory
+np.savetxt('traj_final.txt', traj_final, delimiter=',', header='time,right_j0,right_j1,right_j2,right_j3,right_j4,right_j5,right_j6,right_gripper', comments='', fmt="%1.12f")
+
 
 

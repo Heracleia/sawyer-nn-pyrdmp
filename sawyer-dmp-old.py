@@ -61,13 +61,11 @@ def detection():
     cameraMatrix = np.array([[506.857008, 0.000000, 311.541447],[0.000000, 511.072198, 257.798417],[0.000000, 0.000000, 1.000000]])
     distCoeffs = np.array([0.047441, -0.104070, 0.006161, 0.000338, 0.000000])
 
-    y_robot=[-0.4,-0.8]
-    #y_image=[206,391]
-    y_image = [196,380]
+    y_robot = [-0.4, -0.8]
+    y_image = [173, 355]
 
-    x_robot=[-0.3,0.3]
-    #x_image=[187,462]
-    x_image = [170,446]
+    x_robot = [-0.3, 0.3]
+    x_image = [178, 448]
     
     positions=[]
     
@@ -267,7 +265,7 @@ def DMP_Generate(par, target):
     results = {}
     results['ydd_xr'] = ydd_xr
     results['yd_xr'] = yd_xr
-    results['y_xr'] = y
+    results['y_xr'] = y_xr
     results['fr_x_zeros'] = fr_x_zeros
     results['f_replay_x'] = f_replay_x
 
@@ -301,8 +299,9 @@ gripper = intera_interface.Gripper('right')
 robot=Sawyer()
 
 # Models location
-forward_model_file='/home/michail/ros_ws/src/intera_sdk/intera_examples/scripts/MyScripts/ForwardModel/4DOF/forwardmodel_6M.h5'
-inverse_model_file='/home/michail/ros_ws/src/intera_sdk/intera_examples/scripts/MyScripts/InverseModel/MLP_2.h5'
+forward_model_file = '/home/michail/ros_ws/src/intera_sdk/intera_examples/scripts/MyScripts/sawyer-nn-pyrdmp/weights/ForwardModel/4DOF/forward.h5'
+inverse_model_file = '/home/michail/ros_ws/src/intera_sdk/intera_examples/scripts/MyScripts/sawyer-nn-pyrdmp/weights/InverseModel/MLP_2.h5'
+
 
 # Load the models
 forwardModel= load_model(forward_model_file)
