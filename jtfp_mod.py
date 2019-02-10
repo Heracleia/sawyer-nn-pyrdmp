@@ -70,6 +70,7 @@ class Trajectory(object):
         self.limb = limb
         self.gripper_name = '_'.join([limb, 'gripper'])
         #gripper interface - for gripper command playback
+        #TODO: Gripper not detected excepted
         try:
             self.gripper = intera_interface.Gripper(self.gripper_name)
         except:

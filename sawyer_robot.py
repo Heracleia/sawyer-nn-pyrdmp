@@ -115,7 +115,7 @@ class Sawyer:
         return angles
 
     # Function that performs the Forward Kinematic Equations
-    def Forward_Kinematics(self, trans):
+    def forward_kinematics(self, trans):
 
 
         self.temp=[trans[0]]
@@ -129,8 +129,75 @@ class Sawyer:
   
         return self.temp
 
+    def inverse_kinematics(self, limb, coordinates, orientation):
+        angles=limb.joint_angles()
+        ns = "ExternalTools/right/PositionKinematicsNode/IKService"
+        iksvc = rospy.ServiceProxy(ns, SolvePositionIK)
+        ikreq = SolvePositionIKRequest()
+
+        # Find the Equivalent gamma (yaw), beta (pitch) and alpha (roll)
+        quaternion = tf.transformations.quaternion_from_euler(math.radians(orientation[0]), math.radians(orientation[1]), math.radians(orientation[2]))
+        
+        # Get the current state of the robot
+        angles=limb.joint_angles()
+
+        hdr = Header(stamp=rospy.Time.now(), frame_id='base')
+        poses = {
+            'right': PoseStamped(
+                header=hdr,
+                pose=Pose(
+                    position=Point(
+                        x=coordinates[0],
+                        y=coordinates[1],
+                        z=coordinates[2],
+                        ),
+                    orientation=Quaternion(
+                        x=quaternion[0],
+                        y=quaternion[1],
+                        z=quaternion[2],
+                        w=quaternion[3],
+                        ),
+                    ),
+                ),
+            }
+    
+        ikreq.pose_stamp.append(poses['right'])
+        ikreq.tip_names.append('right_hand')
+        ikreq.seed_mode = ikreq.SEED_USER
+        
+        seed = JointState()
+        seed.name = limb.joint_names()
+        seed.position = [angles[a] for a in seed.name]
+        ikreq.seed_angles.append(seed)
+        
+        # Optimize the null space in terms of joint configuration
+        ikreq.use_nullspace_goal.append(True)
+        goal = JointState()
+        goal.name = ['right_j2']
+        goal.position = [0]
+        ikreq.nullspace_goal.append(goal)
+        ikreq.nullspace_gain.append(0.4)
+        
+        try:
+        	rospy.wait_for_service(ns, 5.0)
+        	resp = iksvc(ikreq)
+        except (rospy.ServiceException, rospy.ROSException) as e:
+        	rospy.logerr("Service call failed: %s" % (e,))
+        
+        limb_joints = angles 
+        # Check if result valid, and type of seed ultimately used to get solution
+        if (resp.result_type[0] > 0):
+        	seed_str = {ikreq.SEED_USER: 'User Provided Seed',
+        		    ikreq.SEED_CURRENT: 'Current Joint Angles',
+        		    ikreq.SEED_NS_MAP: 'Nullspace Setpoints',
+        		    }.get(resp.result_type[0], 'None')
+        	limb_joints = dict(zip(resp.joints[0].name, resp.joints[0].position))
+        
+        return limb_joints
+
+
     # Function that return the IK solution given a position and orientation
-    def Inverse_Kinematics(self,coordinates,orientation):
+    def Inverse_Kinematics_Old(self,coordinates,orientation):
 
         # Define  new node
         #rospy.init_node("Sawyer_ik_client")
