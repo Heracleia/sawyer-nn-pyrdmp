@@ -103,7 +103,7 @@ class Sawyer:
     # Forward Kinematics for the Robot
     def get_T_f(self):
 
-        self.Tf_R=self.Forward_Kinematics(self.T_R)
+        self.Tf_R=self.forward_kinematics(self.T_R)
 
         return self.Tf_R
 

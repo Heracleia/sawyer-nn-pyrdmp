@@ -62,10 +62,10 @@ def detection():
     distCoeffs = np.array([0.047441, -0.104070, 0.006161, 0.000338, 0.000000])
 
     y_robot = [-0.4, -0.8]
-    y_image = [173, 355]
+    y_image = [212, 399]
 
     x_robot = [-0.3, 0.3]
-    x_image = [178, 448]
+    x_image = [162, 440]
     
     positions=[]
     
@@ -376,6 +376,7 @@ while  error>0.075:
     q3.append(q[0][2])
     q4.append(q[0][3])
 
+    print(q)
     # Perform the forward model prediction 
     x=np.divide(forwardModel.predict(q),100)
 
@@ -466,7 +467,7 @@ orientation=[180,0,90]
 
 x=target[0]
 y=target[1]
-z=target[2]
+z=0.1
 coordinates=[x,y,z]
 
 #Call the IK method
