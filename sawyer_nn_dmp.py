@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 
-import math
+import numpy as np
+import sympy as sp
 import rospy
 import cv2
 import intera_interface
@@ -10,8 +11,8 @@ from pyrdmp.utils import *
 
 from keras.models import load_model
 
-from geometry_msgs.msg import Pose
-from sawyer_robot import Sawyer
+from SawyerClass import Sawyer
+#from sawyer_robot import Sawyer
 
 BLUELOWER = np.array([110, 100, 100])
 BLUEUPPER = np.array([120, 255, 255])
@@ -38,11 +39,12 @@ ZLOW = -0.065 # Pick up height
 ZHIGH = 0.26 # Drop off height (to reach over lip of box)
 
 # Models location
-forward_model_file = 'weights/ForwardModel/7DOF/UFMD7_5M.h5'
+forward_model_file = 'weights/ForwardModel/4DOF/forward.h5'
 inverse_model_file = 'weights/InverseModel/MLP_2.h5'
 
+
 # Filters blocks out of image and returns a list of x-y pairs in relation to the end-effector
-def detectBlock(cap):
+def detect_block(cap):
     for i in range(5): cap.grab() # Disregard old frames
 
     ret_val, im = cap.read()
@@ -59,22 +61,24 @@ def detectBlock(cap):
     _, conts, h = cv2.findContours(mask_close.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     cv2.drawContours(und_im, conts, -1, (255, 255, 0), 1) # Helpful for visualization
         
-    centers = [getCenter(*cv2.boundingRect(c)) for c in conts] # Calc center of each cylinder
-    return [pixelsToCartesian(*c) for c in centers] # Return centers (in cartesian instead of pixels)
+    centers = [get_center(*cv2.boundingRect(c)) for c in conts] # Calc center of each cylinder
+    return [pixels_to_cartesian(*c) for c in centers] # Return centers (in cartesian instead of pixels)
+
 
 # Returns center of block based on bounding box
-def getCenter(x, y, w, h):
-    return (((int)(x + 0.5*w)), ((int)(y + 0.5*h)))
+def get_center(x, y, w, h):
+    return ((int)(x + 0.5*w)), ((int)(y + 0.5*h))
+
 
 # Returns x,y coordinates based on linear relationship to pixel values.
-def pixelsToCartesian(cx, cy):
+def pixels_to_cartesian(cx, cy):
     a_y = (CARTBOT[1][0]-CARTBOT[1][1])/(CARTIM[1][1]-CARTIM[1][0])
     b_y = CARTBOT[1][1]-a_y*CARTIM[1][0]
     y = a_y*cy+b_y
     a_x = (CARTBOT[0][0]-CARTBOT[0][1])/(CARTIM[0][1]-CARTIM[0][0])
     b_x = CARTBOT[0][1]-a_x*CARTIM[0][0]
     x = a_x*cx+b_x
-    return (x,y)
+    return x, y
 
 
 # Define  new node
@@ -96,20 +100,18 @@ inverseModel = load_model(inverse_model_file)
 
 # Move the robot to the starting point
 angles = limb.joint_angles()
-angles['right_j0'] = math.radians(0)
-angles['right_j1'] = math.radians(-50)
-angles['right_j2'] = math.radians(0)
-angles['right_j3'] = math.radians(120)
-angles['right_j4'] = math.radians(0)
-angles['right_j5'] = math.radians(0)
-angles['right_j6'] = math.radians(0)
+angles['right_j0'] = np.radians(0)
+angles['right_j1'] = np.radians(-50)
+angles['right_j2'] = np.radians(0)
+angles['right_j3'] = np.radians(120)
+angles['right_j4'] = np.radians(0)
+angles['right_j5'] = np.radians(0)
+angles['right_j6'] = np.radians(0)
 limb.move_to_joint_positions(angles)
 
 # Get the position of the cube
 print('Acquiring Target')
-target = detectBlock(cap)
-
-print(target)
+target = detect_block(cap)
 
 print('Target found at:')
 target = np.array([target[0][0], target[0][1], -0.04])
@@ -127,8 +129,8 @@ recorded_t = []
 recorded_q = []
 
 error = 1000
-convert = 1000000000000
 thresh = -0.06
+interp_len = 200
 dq = limb.joint_angles()
 
 while error > 0.075:
@@ -137,7 +139,7 @@ while error > 0.075:
     recorded_t.append(rospy.get_time())
 
     # Perform the forward model prediction 
-    x = forwardModel.predict(q)/100
+    x = forwardModel.predict(q[:, np.array([0, 1, 3, 5])])/100
 
     # Perform the forward model prediction 
     x_e = 1000*(x - target)
@@ -162,12 +164,19 @@ while error > 0.075:
     recorded_q.append(q)
 
     # Find the error from the target
-    error = math.fabs(x[0][2]-thresh)
+    error = np.fabs(x[0][2]-thresh)
 
 
-#TODO: Perhaps need convert
-t = np.array(recorded_t) - recorded_t[0]
-q_demo = np.concatenate(recorded_q)
+# Pause the robot
+rospy.sleep(1)
+
+recorded_q = np.concatenate(recorded_q).T
+
+# Interpolate the state vectors to length: interp_len
+t = np.linspace(0, recorded_t[-1] - recorded_t[0], interp_len)
+xvals = np.linspace(0, len(recorded_q[0]) - 1, interp_len)
+xp = np.linspace(0, len(recorded_q[0]) - 1, len(recorded_q[0]))
+q_demo = np.array([np.interp(xvals, xp, q) for q in recorded_q])
 
 # Initialize the DMP class
 my_dmp = DMP(20, 20, 0)
@@ -175,10 +184,6 @@ my_dmp = DMP(20, 20, 0)
 # Filtering Parameters
 window = 5
 blends = 10
-
-# Normalize the time vector
-#t = t[:-1] #TODO: 
-t = normalize_vector(t)
 
 # Get the phase from the time vector
 s = my_dmp.phase(t)
@@ -228,21 +233,24 @@ dx_r = np.zeros(q_demo.shape)
 ddx_r = np.zeros(q_demo.shape)
 
 # First find the target in joint space
+#TODO: Find orientation for cup grabbing
 orientation = [180, 0, 90]
 coordinates = [target[0], target[1], target[2]]
 
 robot = Sawyer()
-robot_ik = robot.inverse_kinematics(limb, coordinates, orientation)
+#robot_ik = robot.inverse_kinematics(limb, coordinates, orientation)
+robot_ik = robot.Inverse_Kinematics(coordinates, orientation)
+Te = sp.lambdify(robot.q, robot.get_T_f()[-1])
 
 # Move the robot again to the starting point
 angles = limb.joint_angles()
-angles['right_j0'] = math.radians(0)
-angles['right_j1'] = math.radians(-50)
-angles['right_j2'] = math.radians(0)
-angles['right_j3'] = math.radians(120)
-angles['right_j4'] = math.radians(0)
-angles['right_j5'] = math.radians(0)
-angles['right_j6'] = math.radians(0)
+angles['right_j0'] = np.radians(0)
+angles['right_j1'] = np.radians(-50)
+angles['right_j2'] = np.radians(0)
+angles['right_j3'] = np.radians(120)
+angles['right_j4'] = np.radians(0)
+angles['right_j5'] = np.radians(0)
+angles['right_j6'] = np.radians(0)
 limb.move_to_joint_positions(angles)
 
 print(robot_ik)
@@ -251,10 +259,11 @@ print(robot_ik)
 goal = np.array([[float(robot_ik[i]) for i in limb.joint_names()]])
 
 print('Adaptation start')
-samples = 10
+samples = 20
 rate = 0.5
 
 print(goal)
+print(Te(goal[0][0], goal[0][1], goal[0][2], goal[0][3], goal[0][4], goal[0][5], goal[0][6]))
 
 for i in range(0, q_demo.shape[1]):
     ddx_r[:, i], dx_r[:, i], x_r[:, i], _ = my_dmp.adapt(w[:, i], x[0, i], goal[0][i], t, s, psv, samples, rate)
@@ -276,23 +285,5 @@ time = np.linspace(0, max_time, x_r.shape[0]).reshape((x_r.shape[0], 1))
 traj_final = np.concatenate((t.reshape((-1, 1)), traj_final), axis=1)
 
 # Save trajectory
-np.savetxt('traj_final.txt', traj_final, delimiter=',', header='time,right_j0,right_j1,right_j2,right_j3,right_j4,right_j5,right_j6,right_gripper', comments='', fmt="%1.12f")
-
-
-
-"""
-interp = 200
-
-# Create the trajectory file
-max_time = t[-1]
-time = np.linspace(0, max_time, interp)
-new_q = np.array([np.interp(np.linspace(0, len(x_r)-1, interp), np.linspace(0, len(x_r)-1, len(x_r)), x_r[:, i]) for i in range(len(x_r[0]))])
-
-traj_final = np.concatenate((new_q.T, np.multiply(np.ones((interp, 1)), 0.0402075604203)), axis=1)
-
-traj_final = np.concatenate((time.reshape((-1, 1)), traj_final), axis=1)
-
-# Save trajectory
-np.savetxt('traj_final.txt', traj_final, delimiter=',', header='time,right_j0,right_j1,right_j2,right_j3,right_j4,right_j5,right_j6,right_gripper', comments='', fmt="%1.12f")
-
-"""
+header = 'time,right_j0,right_j1,right_j2,right_j3,right_j4,right_j5,right_j6,right_gripper'
+np.savetxt('traj_final.txt', traj_final, delimiter=',', header=header, comments='', fmt="%1.12f")

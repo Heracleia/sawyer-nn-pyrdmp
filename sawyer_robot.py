@@ -117,16 +117,12 @@ class Sawyer:
 
     # Function that performs the Forward Kinematic Equations
     def forward_kinematics(self, trans):
-    
-    
-        self.temp=[trans[0]]
-        counter=-1;
-    
+        self.temp = [trans[0]]
+        counter = 0
         # Traverse through the transformation tree
         for i in trans[1:]:#
-    
-            counter=counter+1
-            self.temp.append(self.temp[counter]*i)#
+            self.temp.append(self.temp[counter]*i)
+            counter += 1
       
         return self.temp
 
