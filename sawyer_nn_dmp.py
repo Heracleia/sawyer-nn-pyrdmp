@@ -58,7 +58,7 @@ def detect_block(cap):
     mask_open = cv2.morphologyEx(mask, cv2.MORPH_OPEN, KERNELOPEN)
     mask_close = cv2.morphologyEx(mask_open, cv2.MORPH_CLOSE, KERNELCLOSE)
     
-    _, conts, h = cv2.findContours(mask_close.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    conts, h = cv2.findContours(mask_close.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     cv2.drawContours(und_im, conts, -1, (255, 255, 0), 1) # Helpful for visualization
         
     centers = [get_center(*cv2.boundingRect(c)) for c in conts] # Calc center of each cylinder
@@ -176,7 +176,7 @@ recorded_q = np.concatenate(recorded_q).T
 t = np.linspace(0, recorded_t[-1] - recorded_t[0], interp_len)
 xvals = np.linspace(0, len(recorded_q[0]) - 1, interp_len)
 xp = np.linspace(0, len(recorded_q[0]) - 1, len(recorded_q[0]))
-q_demo = np.array([np.interp(xvals, xp, q) for q in recorded_q])
+q_demo = np.array([np.interp(xvals, xp, q) for q in recorded_q]).T
 
 # Initialize the DMP class
 my_dmp = DMP(20, 20, 0)
@@ -214,7 +214,7 @@ w = np.zeros((my_dmp.ng, q_demo.shape[1]))
 
 print('Imitation start')
 
-for i in range(0, q.shape[1]):
+for i in range(0, q_demo.shape[1]):
     ftarget[:, i], w[:, i] = my_dmp.imitate(f_q[:, i], f_dq[:, i], f_ddq[:, i], t, s, psv)
 
 print('Imitation done')
@@ -224,7 +224,7 @@ x = np.zeros(q_demo.shape)
 dx = np.zeros(q_demo.shape)
 ddx = np.zeros(q_demo.shape)
 
-for i in range(0, q.shape[1]):
+for i in range(0, q_demo.shape[1]):
     ddx[:, i], dx[:, i], x[:, i] = my_dmp.generate(w[:, i], f_q[0, i], f_q[-1, i], t, s, psv)
 
 # Adapt using Reinforcement Learning
