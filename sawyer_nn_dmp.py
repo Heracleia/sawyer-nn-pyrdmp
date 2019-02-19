@@ -109,18 +109,6 @@ angles['right_j5'] = np.radians(0)
 angles['right_j6'] = np.radians(0)
 limb.move_to_joint_positions(angles)
 
-# Get the position of the cube
-print('Acquiring Target')
-target = detect_block(cap)
-
-print('Target found at:')
-target = np.array([target[0][0], target[0][1], -0.04])
-print(target)
-
-# Get the initial position of the robot
-joint_positions = limb.joint_angles()
-q = np.array([[float(joint_positions[i]) for i in limb.joint_names()]])
-
 # Damping factor
 d = np.array([100, 100, 100, 100])
 
@@ -129,11 +117,24 @@ recorded_t = []
 recorded_q = []
 
 error = 1000
-thresh = -0.06
 interp_len = 200
+thresh = -0.04
+stop = 0.074
 dq = limb.joint_angles()
 
-while error > 0.075:
+# Get the position of the cube
+print('Acquiring Target')
+target = detect_block(cap)
+
+print('Target found at:')
+target = np.array([target[0][0], target[0][1], thresh])
+print(target)
+
+# Get the initial position of the robot
+joint_positions = limb.joint_angles()
+q = np.array([[float(joint_positions[i]) for i in limb.joint_names()]])
+
+while error > stop:
 
     # Accumulate the time vector and the joint history
     recorded_t.append(rospy.get_time())
@@ -233,12 +234,11 @@ dx_r = np.zeros(q_demo.shape)
 ddx_r = np.zeros(q_demo.shape)
 
 # First find the target in joint space
-#TODO: Find orientation for cup grabbing
-orientation = [180, 0, 90]
+orientation = [180, 0, 90]  # Cubes goal
+# orientation = [-135, -90, 135]  # Cup goal
 coordinates = [target[0], target[1], target[2]]
 
 robot = Sawyer()
-#robot_ik = robot.inverse_kinematics(limb, coordinates, orientation)
 robot_ik = robot.Inverse_Kinematics(coordinates, orientation)
 Te = sp.lambdify(robot.q, robot.get_T_f()[-1])
 
