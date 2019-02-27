@@ -12,7 +12,6 @@ from pyrdmp.utils import *
 from keras.models import load_model
 
 from SawyerClass import Sawyer
-#from sawyer_robot import Sawyer
 
 BLUELOWER = np.array([110, 100, 100])
 BLUEUPPER = np.array([120, 255, 255])
@@ -84,6 +83,9 @@ def pixels_to_cartesian(cx, cy):
 # Define  new node
 rospy.init_node("Sawyer_DMP")
 
+# Mode to compare demonstration (0) vs inverse model approach (1)
+mod = 0
+
 # Create an object to interface with the arm
 limb = intera_interface.Limb('right')
 
@@ -99,28 +101,21 @@ forwardModel = load_model(forward_model_file)
 inverseModel = load_model(inverse_model_file)
 
 # Move the robot to the starting point
-angles = limb.joint_angles()
-angles['right_j0'] = np.radians(0)
-angles['right_j1'] = np.radians(-50)
-angles['right_j2'] = np.radians(0)
-angles['right_j3'] = np.radians(120)
-angles['right_j4'] = np.radians(0)
-angles['right_j5'] = np.radians(0)
-angles['right_j6'] = np.radians(0)
-limb.move_to_joint_positions(angles)
+# angles = limb.joint_angles()
+# angles['right_j0'] = np.radians(0)
+# angles['right_j1'] = np.radians(-50)
+# angles['right_j2'] = np.radians(0)
+# angles['right_j3'] = np.radians(120)
+# angles['right_j4'] = np.radians(0)
+# angles['right_j5'] = np.radians(0)
+# angles['right_j6'] = np.radians(0)
+# limb.move_to_joint_positions(angles)
 
-# Damping factor
-d = np.array([100, 100, 100, 100])
-
-# Declare the joint position history and time history
-recorded_t = []
-recorded_q = []
-
+# Variables to run the inverse model and define the goal
 error = 1000
 interp_len = 200
 thresh = -0.04
 stop = 0.074
-dq = limb.joint_angles()
 
 # Get the position of the cube
 print('Acquiring Target')
@@ -130,54 +125,75 @@ print('Target found at:')
 target = np.array([target[0][0], target[0][1], thresh])
 print(target)
 
-# Get the initial position of the robot
-joint_positions = limb.joint_angles()
-q = np.array([[float(joint_positions[i]) for i in limb.joint_names()]])
+if mod == 1:
 
-while error > stop:
+    # Damping factor
+    d = np.array([100, 100, 100, 100])
 
-    # Accumulate the time vector and the joint history
-    recorded_t.append(rospy.get_time())
+    # Declare the joint position history and time history
+    recorded_t = []
+    recorded_q = []
 
-    # Perform the forward model prediction 
-    x = forwardModel.predict(q[:, np.array([0, 1, 3, 5])])/100
-
-    # Perform the forward model prediction 
-    x_e = 1000*(x - target)
-
-    # Based on the forward model prediction, predict the next motor command
-    new_q = np.radians(inverseModel.predict(x_e))
-
-    # Send the velocity command to the robot
     dq = limb.joint_angles()
-    dq['right_j0'] = d[0]*new_q[0][0]
-    dq['right_j1'] = d[1]*new_q[0][1]
-    dq['right_j2'] = 0
-    dq['right_j3'] = d[2]*new_q[0][2]
-    dq['right_j4'] = 0
-    dq['right_j5'] = d[3]*new_q[0][3]
-    dq['right_j6'] = 0
-    limb.set_joint_velocities(dq)
 
-    # Get the new state of the robot
+    # Get the initial position of the robot
     joint_positions = limb.joint_angles()
     q = np.array([[float(joint_positions[i]) for i in limb.joint_names()]])
-    recorded_q.append(q)
 
-    # Find the error from the target
-    error = np.fabs(x[0][2]-thresh)
+    while error > stop:
 
+        # Accumulate the time vector and the joint history
+        recorded_t.append(rospy.get_time())
 
-# Pause the robot
-rospy.sleep(1)
+        # Perform the forward model prediction
+        x = forwardModel.predict(q[:, np.array([0, 1, 3, 5])])/100
 
-recorded_q = np.concatenate(recorded_q).T
+        # Perform the forward model prediction
+        x_e = 1000*(x - target)
 
-# Interpolate the state vectors to length: interp_len
-t = np.linspace(0, recorded_t[-1] - recorded_t[0], interp_len)
-xvals = np.linspace(0, len(recorded_q[0]) - 1, interp_len)
-xp = np.linspace(0, len(recorded_q[0]) - 1, len(recorded_q[0]))
-q_demo = np.array([np.interp(xvals, xp, q) for q in recorded_q]).T
+        # Based on the forward model prediction, predict the next motor command
+        new_q = np.radians(inverseModel.predict(x_e))
+
+        # Send the velocity command to the robot
+        dq = limb.joint_angles()
+        dq['right_j0'] = d[0]*new_q[0][0]
+        dq['right_j1'] = d[1]*new_q[0][1]
+        dq['right_j2'] = 0
+        dq['right_j3'] = d[2]*new_q[0][2]
+        dq['right_j4'] = 0
+        dq['right_j5'] = d[3]*new_q[0][3]
+        dq['right_j6'] = 0
+        limb.set_joint_velocities(dq)
+
+        # Get the new state of the robot
+        joint_positions = limb.joint_angles()
+        q = np.array([[float(joint_positions[i]) for i in limb.joint_names()]])
+        recorded_q.append(q)
+
+        # Find the error from the target
+        error = np.fabs(x[0][2]-thresh)
+
+    # Pause the robot
+    rospy.sleep(1)
+
+    recorded_q = np.concatenate(recorded_q).T
+
+    # Interpolate the state vectors to length: interp_len
+    t = np.linspace(0, recorded_t[-1] - recorded_t[0], interp_len)
+    xvals = np.linspace(0, len(recorded_q[0]) - 1, interp_len)
+    xp = np.linspace(0, len(recorded_q[0]) - 1, len(recorded_q[0]))
+    q_demo = np.array([np.interp(xvals, xp, q) for q in recorded_q]).T
+
+else:
+
+    # Load the demo data
+    data = load_demo("/home/michail/ros_ws/src/intera_sdk/intera_examples/scripts/MyScripts/Demos/demo15.txt")
+
+    # Obtain the joint position data and the time vector
+    recorded_t, q_demo = parse_demo(data)
+
+    # Normalize the time vector
+    t = normalize_vector(recorded_t)
 
 # Initialize the DMP class
 my_dmp = DMP(20, 20, 0)
@@ -232,10 +248,12 @@ for i in range(0, q_demo.shape[1]):
 x_r = np.zeros(q_demo.shape)
 dx_r = np.zeros(q_demo.shape)
 ddx_r = np.zeros(q_demo.shape)
+w_a = np.zeros((my_dmp.ng, q_demo.shape[1]))
+gain = []
 
 # First find the target in joint space
 orientation = [180, 0, 90]  # Cubes goal
-# orientation = [-135, -90, 135]  # Cup goal
+#orientation = [-135, -90, 135]  # Cup goal
 coordinates = [target[0], target[1], target[2]]
 
 robot = Sawyer()
@@ -243,15 +261,15 @@ robot_ik = robot.Inverse_Kinematics(coordinates, orientation)
 Te = sp.lambdify(robot.q, robot.get_T_f()[-1])
 
 # Move the robot again to the starting point
-angles = limb.joint_angles()
-angles['right_j0'] = np.radians(0)
-angles['right_j1'] = np.radians(-50)
-angles['right_j2'] = np.radians(0)
-angles['right_j3'] = np.radians(120)
-angles['right_j4'] = np.radians(0)
-angles['right_j5'] = np.radians(0)
-angles['right_j6'] = np.radians(0)
-limb.move_to_joint_positions(angles)
+# angles = limb.joint_angles()
+# angles['right_j0'] = np.radians(0)
+# angles['right_j1'] = np.radians(-50)
+# angles['right_j2'] = np.radians(0)
+# angles['right_j3'] = np.radians(120)
+# angles['right_j4'] = np.radians(0)
+# angles['right_j5'] = np.radians(0)
+# angles['right_j6'] = np.radians(0)
+# limb.move_to_joint_positions(angles)
 
 print(robot_ik)
 
@@ -266,13 +284,15 @@ print(goal)
 print(Te(goal[0][0], goal[0][1], goal[0][2], goal[0][3], goal[0][4], goal[0][5], goal[0][6]))
 
 for i in range(0, q_demo.shape[1]):
-    ddx_r[:, i], dx_r[:, i], x_r[:, i], _ = my_dmp.adapt(w[:, i], x[0, i], goal[0][i], t, s, psv, samples, rate)
+    ddx_r[:, i], dx_r[:, i], x_r[:, i], w_a[:, i], dummy1 = my_dmp.adapt(w[:, i], x[0, i], goal[0][i], t, s, psv, samples, rate)
+    gain.append(dummy1)
 
 print('Adaptation complete')
 print(x_r[-1])
 
 # Plot functions
 comparison(t, f_q, x, x_r)
+expected_return(gain)
 show_all()
 
 # Save trajectory
@@ -287,3 +307,13 @@ traj_final = np.concatenate((t.reshape((-1, 1)), traj_final), axis=1)
 # Save trajectory
 header = 'time,right_j0,right_j1,right_j2,right_j3,right_j4,right_j5,right_j6,right_gripper'
 np.savetxt('traj_final.txt', traj_final, delimiter=',', header=header, comments='', fmt="%1.12f")
+
+# Save Expected Return
+# model = 'inv_'
+model = 'demo_'
+# object = 'cube_'
+object = 'cup_'
+trial = '5'
+
+print('results/'+model+object+trial+'.txt')
+np.savetxt('results/'+model+object+trial+'.txt', np.array(gain), fmt='%s')
