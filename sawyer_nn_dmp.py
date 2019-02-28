@@ -13,6 +13,9 @@ from keras.models import load_model
 
 from SawyerClass import Sawyer
 
+from args import arg
+
+
 BLUELOWER = np.array([110, 100, 100])
 BLUEUPPER = np.array([120, 255, 255])
 
@@ -56,8 +59,9 @@ def detect_block(cap):
     mask = cv2.inRange(imHSV, BLUELOWER, BLUEUPPER) # Masking out blue cylinders
     mask_open = cv2.morphologyEx(mask, cv2.MORPH_OPEN, KERNELOPEN)
     mask_close = cv2.morphologyEx(mask_open, cv2.MORPH_CLOSE, KERNELCLOSE)
-    
-    conts, h = cv2.findContours(mask_close.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+   
+    #TODO: Get Michail to update installation of OpenCV...
+    _, conts, h = cv2.findContours(mask_close.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     cv2.drawContours(und_im, conts, -1, (255, 255, 0), 1) # Helpful for visualization
         
     centers = [get_center(*cv2.boundingRect(c)) for c in conts] # Calc center of each cylinder
@@ -83,9 +87,6 @@ def pixels_to_cartesian(cx, cy):
 # Define  new node
 rospy.init_node("Sawyer_DMP")
 
-# Mode to compare demonstration (0) vs inverse model approach (1)
-mod = 0
-
 # Create an object to interface with the arm
 limb = intera_interface.Limb('right')
 
@@ -101,20 +102,20 @@ forwardModel = load_model(forward_model_file)
 inverseModel = load_model(inverse_model_file)
 
 # Move the robot to the starting point
-# angles = limb.joint_angles()
-# angles['right_j0'] = np.radians(0)
-# angles['right_j1'] = np.radians(-50)
-# angles['right_j2'] = np.radians(0)
-# angles['right_j3'] = np.radians(120)
-# angles['right_j4'] = np.radians(0)
-# angles['right_j5'] = np.radians(0)
-# angles['right_j6'] = np.radians(0)
-# limb.move_to_joint_positions(angles)
+angles = limb.joint_angles()
+angles['right_j0'] = np.radians(0)
+angles['right_j1'] = np.radians(-50)
+angles['right_j2'] = np.radians(0)
+angles['right_j3'] = np.radians(120)
+angles['right_j4'] = np.radians(0)
+angles['right_j5'] = np.radians(0)
+angles['right_j6'] = np.radians(0)
+limb.move_to_joint_positions(angles)
 
 # Variables to run the inverse model and define the goal
 error = 1000
 interp_len = 200
-thresh = -0.04
+thresh = -0.04 if arg.use_inverse else 0.2
 stop = 0.074
 
 # Get the position of the cube
@@ -125,7 +126,7 @@ print('Target found at:')
 target = np.array([target[0][0], target[0][1], thresh])
 print(target)
 
-if mod == 1:
+if arg.use_inverse:
 
     # Damping factor
     d = np.array([100, 100, 100, 100])
@@ -187,7 +188,7 @@ if mod == 1:
 else:
 
     # Load the demo data
-    data = load_demo("/home/michail/ros_ws/src/intera_sdk/intera_examples/scripts/MyScripts/Demos/demo15.txt")
+    data = load_demo(arg.input_file)
 
     # Obtain the joint position data and the time vector
     recorded_t, q_demo = parse_demo(data)
@@ -196,11 +197,7 @@ else:
     t = normalize_vector(recorded_t)
 
 # Initialize the DMP class
-my_dmp = DMP(20, 20, 0)
-
-# Filtering Parameters
-window = 5
-blends = 10
+my_dmp = DMP(arg.gain, arg.num_gaussians, arg.stabilization)
 
 # Get the phase from the time vector
 s = my_dmp.phase(t)
@@ -212,7 +209,7 @@ psv = my_dmp.distributions(s)
 dq_demo = np.zeros(q_demo.shape)
 
 for i in range(0, q_demo.shape[1]):
-    q_demo[:, i] = smooth_trajectory(q_demo[:, i], window)
+    q_demo[:, i] = smooth_trajectory(q_demo[:, i], arg.window)
     dq_demo[:, i] = vel(q_demo[:, i], t)
 
 # Filter the position velocity and acceleration signals
@@ -221,7 +218,7 @@ f_dq = np.zeros(q_demo.shape)
 f_ddq = np.zeros(q_demo.shape)
 
 for i in range(0, q_demo.shape[1]):
-    f_q[:, i] = blend_trajectory(q_demo[:, i], dq_demo[:, i], t, blends)
+    f_q[:, i] = blend_trajectory(q_demo[:, i], dq_demo[:, i], t, arg.blends)
     f_dq[:, i] = vel(f_q[:, i], t)
     f_ddq[:, i] = vel(f_dq[:, i], t)
 
@@ -260,40 +257,29 @@ robot = Sawyer()
 robot_ik = robot.Inverse_Kinematics(coordinates, orientation)
 Te = sp.lambdify(robot.q, robot.get_T_f()[-1])
 
-# Move the robot again to the starting point
-# angles = limb.joint_angles()
-# angles['right_j0'] = np.radians(0)
-# angles['right_j1'] = np.radians(-50)
-# angles['right_j2'] = np.radians(0)
-# angles['right_j3'] = np.radians(120)
-# angles['right_j4'] = np.radians(0)
-# angles['right_j5'] = np.radians(0)
-# angles['right_j6'] = np.radians(0)
-# limb.move_to_joint_positions(angles)
-
 print(robot_ik)
 
 # Define the target joint positions
 goal = np.array([[float(robot_ik[i]) for i in limb.joint_names()]])
 
 print('Adaptation start')
-samples = 20
-rate = 0.5
 
 print(goal)
 print(Te(goal[0][0], goal[0][1], goal[0][2], goal[0][3], goal[0][4], goal[0][5], goal[0][6]))
 
 for i in range(0, q_demo.shape[1]):
-    ddx_r[:, i], dx_r[:, i], x_r[:, i], w_a[:, i], dummy1 = my_dmp.adapt(w[:, i], x[0, i], goal[0][i], t, s, psv, samples, rate)
-    gain.append(dummy1)
+    ddx_r[:, i], dx_r[:, i], x_r[:, i], w_a[:, i], g = my_dmp.adapt(w[:, i], 
+            x[0, i], goal[0][i], t, s, psv, arg.samples, arg.rate)
+    gain.append(g)
 
 print('Adaptation complete')
 print(x_r[-1])
 
 # Plot functions
-comparison(t, f_q, x, x_r)
-expected_return(gain)
-show_all()
+if arg.show_plots:
+    comparison(t, f_q, x, x_r)
+    expected_return(gain)
+    show_all()
 
 # Save trajectory
 traj_final = np.concatenate((x_r, np.multiply(np.ones((x_r.shape[0], 1)), 0.0402075604203)), axis=1)
@@ -310,10 +296,10 @@ np.savetxt('traj_final.txt', traj_final, delimiter=',', header=header, comments=
 
 # Save Expected Return
 # model = 'inv_'
-model = 'demo_'
+#model = 'demo_'
 # object = 'cube_'
-object = 'cup_'
-trial = '5'
+#object = 'cup_'
+#trial = '5'
 
-print('results/'+model+object+trial+'.txt')
-np.savetxt('results/'+model+object+trial+'.txt', np.array(gain), fmt='%s')
+print('Output file:', arg.output_file)
+np.savetxt(arg.output_file, np.array(gain), fmt='%s')
