@@ -43,6 +43,7 @@ import intera_interface
 
 from intera_interface import CHECK_VERSION
 
+import argparse
 
 class Trajectory(object):
     def __init__(self, limb="right"):
@@ -305,14 +306,18 @@ def main():
 Related examples:
   joint_recorder.py; joint_position_file_playback.py.
     """
+    parser = argparse.ArgumentParser(description="Use Reinforced DMP to adapt to new goals")
+    parser.add_argument('-if', '--input-file', type=str, default='traj_final.txt',
+                                help="Input trajectory file")
+    arg = parser.parse_args()
+
+
     rp = intera_interface.RobotParams()
     valid_limbs = rp.get_limb_names()
     if not valid_limbs:
         rp.log_message(("Cannot detect any limb parameters on this robot. "
           "Exiting."), "ERROR")
         return
-
-    FILE = 'traj_final.txt'
 
     print("Initializing node... ")
     rospy.init_node("sdk_joint_trajectory_file_playback")
@@ -323,7 +328,7 @@ Related examples:
     print("Running. Ctrl-c to quit")
 
     traj = Trajectory(valid_limbs[0])
-    traj.parse_file(path.expanduser(FILE))
+    traj.parse_file(path.expanduser(arg.input_file))
     #for safe interrupt handling
     rospy.on_shutdown(traj.stop)
     result = True

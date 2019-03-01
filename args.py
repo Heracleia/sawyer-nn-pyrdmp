@@ -19,6 +19,10 @@ parser.add_argument('-i', '--use-inverse', dest='use_inverse', action='store_tru
                     help="Use inverse model to calculate velocities in RT")
 parser.add_argument('-d', '--use-demo', dest='use_inverse', action='store_false',
                     help="Use demonstration file from --input instead of inverse model")
+parser.add_argument('--use-cup', dest='objects', action='store_true',
+                    help="Use orientation for cup")
+parser.add_argument('--use-cube', dest='objects', action='store_false',
+                    help="Use orientation for cube")
 parser.add_argument('-w', '--window', type=int, default=5,
                     help="Window size for filtering")
 parser.add_argument('-b', '--blends', type=int, default=10,
@@ -27,5 +31,5 @@ parser.add_argument('-s', '--samples', type=int, default=10,
                     help="Number of paths for exploration")
 parser.add_argument('-r', '--rate', type=float, default=0.5,
                     help="Number of possible paths to keep")
-parser.set_defaults(show_plots=True, use_inverse=True)
+parser.set_defaults(show_plots=True, use_inverse=True, objects=True)
 arg = parser.parse_args()

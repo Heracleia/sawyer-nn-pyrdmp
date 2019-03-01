@@ -249,8 +249,10 @@ w_a = np.zeros((my_dmp.ng, q_demo.shape[1]))
 gain = []
 
 # First find the target in joint space
-orientation = [180, 0, 90]  # Cubes goal
-#orientation = [-135, -90, 135]  # Cup goal
+if arg.objects:
+    orientation = [-135, -90, 135]  # Cup goal
+else:
+    orientation = [180, 0, 90]  # Cubes goal
 coordinates = [target[0], target[1], target[2]]
 
 robot = Sawyer()
