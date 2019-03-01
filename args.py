@@ -9,7 +9,7 @@ parser.add_argument('-sb', '--stabilization', type=bool, default=False,
                     help="Add a stability term at end of trajectory")
 parser.add_argument('-if', '--input-file', type=str, default='data/demo12.txt',
                     help="Input trajectory file")
-parser.add_argument('-of', '--output-file', type=str, default='output.txt',
+parser.add_argument('-of', '--output-file', type=str, default='output',
                     help="Output Gains file")
 parser.add_argument('-p', '--show-plots', dest='show_plots', action='store_true',
                     help="Show plots at end of computation")

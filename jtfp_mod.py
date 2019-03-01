@@ -306,11 +306,12 @@ def main():
 Related examples:
   joint_recorder.py; joint_position_file_playback.py.
     """
-    parser = argparse.ArgumentParser(description="Use Reinforced DMP to adapt to new goals")
+    parser = argparse.ArgumentParser(description="Playback joint trajectory")
     parser.add_argument('-if', '--input-file', type=str, default='traj_final.txt',
                                 help="Input trajectory file")
     arg = parser.parse_args()
-
+    
+    print(arg.input_file)
 
     rp = intera_interface.RobotParams()
     valid_limbs = rp.get_limb_names()

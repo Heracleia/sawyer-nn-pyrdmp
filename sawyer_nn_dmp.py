@@ -5,6 +5,8 @@ import sympy as sp
 import rospy
 import cv2
 import intera_interface
+from args import arg
+
 from pyrdmp.dmp import DynamicMovementPrimitive as DMP
 from pyrdmp.plots import *
 from pyrdmp.utils import *
@@ -13,7 +15,6 @@ from keras.models import load_model
 
 from SawyerClass import Sawyer
 
-from args import arg
 
 
 BLUELOWER = np.array([110, 100, 100])
@@ -115,7 +116,7 @@ limb.move_to_joint_positions(angles)
 # Variables to run the inverse model and define the goal
 error = 1000
 interp_len = 200
-thresh = -0.04 if arg.use_inverse else 0.2
+thresh = -0.04 if arg.use_inverse else 0.0 # 0.2
 stop = 0.074
 
 # Get the position of the cube
@@ -279,29 +280,18 @@ print(x_r[-1])
 
 # Plot functions
 if arg.show_plots:
-    comparison(t, f_q, x, x_r)
-    expected_return(gain)
+    comparison(t, f_q, x, x_r, directory=arg.output_file)
+    expected_return(gain, directory=arg.output_file)
     show_all()
 
 # Save trajectory
 traj_final = np.concatenate((x_r, np.multiply(np.ones((x_r.shape[0], 1)), 0.0402075604203)), axis=1)
-
-# Create the trajectory file
-max_time = t[-1]
-time = np.linspace(0, max_time, x_r.shape[0]).reshape((x_r.shape[0], 1))
-
+time = np.linspace(0, t[-1], x_r.shape[0]).reshape((x_r.shape[0], 1))
 traj_final = np.concatenate((t.reshape((-1, 1)), traj_final), axis=1)
 
 # Save trajectory
 header = 'time,right_j0,right_j1,right_j2,right_j3,right_j4,right_j5,right_j6,right_gripper'
-np.savetxt('traj_final.txt', traj_final, delimiter=',', header=header, comments='', fmt="%1.12f")
+np.savetxt(arg.output_file + '_trajectory.txt', traj_final, delimiter=',', header=header, comments='', fmt="%1.12f")
 
-# Save Expected Return
-# model = 'inv_'
-#model = 'demo_'
-# object = 'cube_'
-#object = 'cup_'
-#trial = '5'
-
-print('Output file:', arg.output_file)
-np.savetxt(arg.output_file, np.array(gain), fmt='%s')
+print('Output file:', arg.output_file + '.txt')
+np.savetxt(arg.output_file + '.txt', np.array(gain), fmt='%s')
